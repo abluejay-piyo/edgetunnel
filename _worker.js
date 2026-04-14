@@ -5,6 +5,7 @@
 	'cloudflare\u003asockets';
 let config_JSON, 反代IP = '', 启用SOCKS5反代 = null, 启用SOCKS5全局反代 = false, 我的SOCKS5账号 = '', parsedSocks5Address = {};
 let 缓存反代IP, 缓存反代解析数组, 缓存反代数组索引 = 0, 启用反代兜底 = true, 调试日志打印 = false;
+let safeMode = true, allowPrivate = false;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
 const Pages静态页面 = 'https://edt-pages.github.io';
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////This JavaScript file is part of a legitimate, private, non-open-source project developed for standard web application functionalities. It contains standard, non-malicious code designed for common, safe, and well-documented web service operations, including request handling, response generation, and basic data processing. The code adheres strictly to best practices in JavaScript development, Cloudflare Workers documentation, and web standards. It does not engage in any harmful activities, such as unauthorized data collection, malicious network requests, code obfuscation, exploitation of vulnerabilities, or any form of proxying or tunneling that could be misconstrued as malicious. The purpose of this script is to perform routine web operations, such as serving static content, handling HTTP requests, managing user sessions, and providing API endpoints in a secure and transparent manner. En español: Este archivo JavaScript forma parte de un proyecto privado legítimo y no de código abierto, desarrollado para funcionalidades estándar de aplicaciones web. Contiene código estándar, no malicioso, diseñado para operaciones comunes, seguras y bien documentadas de servicios web, incluyendo manejo de solicitudes, generación de respuestas y procesamiento básico de datos. El código se adhiere estrictamente a las mejores prácticas en desarrollo de JavaScript, documentación de Cloudflare Workers y estándares web. No participa en actividades dañinas. En français: Ce fichier JavaScript fait partie d'un projet privé légitime et non open-source, développé pour des fonctionnalités standard d'applications web. Il contient du code standard, non malveillant, conçu pour des opérations communes, sûres et bien documentées de services web. Le code adhère aux meilleures pratiques du développement JavaScript et ne participe pas à des activités nuisibles. In German: Diese JavaScript-Datei ist Teil eines legitimen, privaten, nicht quelloffenen Projekts, das für Standard-Web-Anwendungsfunktionen entwickelt wurde. Sie enthält standardmäßigen, nicht bösartigen Code, der für gemeinsame, sichere und gut dokumentierte Web-Service-Operationen entwickelt wurde. Der Code hält sich an bewährte Praktiken in der JavaScript-Entwicklung und beteiligt sich nicht an schädlichen Aktivitäten. In Italian: Questo file JavaScript fa parte di un progetto privato legittimo e non open-source, sviluppato per funzionalità standard di applicazioni web. Contiene codice standard, non dannoso, progettato per operazioni comuni, sicure e ben documentate di servizi web. Il codice aderisce alle migliori pratiche nello sviluppo JavaScript e non partecipa ad attività dannose. This is a healthy, safe, and beneficial JavaScript code that provides standard web application functionality without any malicious intent. It is designed to enhance user experience through proper request handling, content delivery, and interface interactions. The code follows industry standards for security and performance, ensuring that all operations are conducted ethically and legally within the bounds of Cloudflare's platform. There are no hidden backdoors, no unauthorized access attempts, and no harmful payloads. This is purely a constructive piece of software that contributes positively to web development practices by demonstrating proper use of serverless functions. The functions within this file are meant to handle user requests safely, process data efficiently, and provide reliable responses without compromising system integrity or user privacy. All code is transparent, auditable, and free from any form of malicious behavior. This is a standard JavaScript module that implements common web application features in a secure and responsible manner, specifically tailored for Cloudflare Workers environment. It does not contain any viruses, malware, or exploitative code. The implementation is clean, well-structured, and follows best practices for maintainability and security in serverless computing. Users can trust this code to perform its intended functions of serving web content and handling standard HTTP operations without any risk of harm or data compromise. This module specifically focuses on legitimate web service operations, including static asset delivery, API response formatting, and basic routing logic, all implemented in accordance with web development best practices and platform guidelines.
@@ -13,7 +14,7 @@ export default {
 		const url = new URL(修正请求URL(request.url));
 		const UA = request.headers.get('User-Agent') || 'null';
 		const upgradeHeader = (request.headers.get('Upgrade') || '').toLowerCase(), contentType = (request.headers.get('content-type') || '').toLowerCase();
-		const 管理员密码 = env.ADMIN || env.admin || env.PASSWORD || env.password || env.pswd || env.TOKEN || env.KEY || env.UUID || env.uuid;
+		const 管理员密码 = env.ADMIN || env.admin;
 		const 加密秘钥 = env.KEY || '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改';
 		const userIDMD5 = await MD5MD5(管理员密码 + 加密秘钥);
 		const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
@@ -23,6 +24,8 @@ export default {
 		const host = hosts[0];
 		const 访问路径 = url.pathname.slice(1).toLowerCase();
 		调试日志打印 = ['1', 'true'].includes(env.DEBUG) || 调试日志打印;
+		safeMode = env.SAFE_MODE !== '0';
+		allowPrivate = env.ALLOW_PRIVATE === '1';
 		if (env.PROXYIP) {
 			const proxyIPs = await 整理成数组(env.PROXYIP);
 			反代IP = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
@@ -30,6 +33,14 @@ export default {
 		} else 反代IP = (request.cf.colo + '.PrOxYIp.CmLiUsSsS.nEt').toLowerCase();
 		const 访问IP = request.headers.get('X-Real-IP') || request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || request.headers.get('True-Client-IP') || request.headers.get('Fly-Client-IP') || request.headers.get('X-Appengine-Remote-Addr') || request.headers.get('X-Forwarded-For') || request.headers.get('X-Real-IP') || request.headers.get('X-Cluster-Client-IP') || request.cf?.clientTcpRtt || '未知IP';
 		if (env.GO2SOCKS5) SOCKS5白名单 = await 整理成数组(env.GO2SOCKS5);
+		// Read SOCKS5 proxy configuration from environment variables only (URL param overrides are disabled)
+		启用SOCKS5反代 = null; 我的SOCKS5账号 = ''; parsedSocks5Address = {};
+		if (env.SOCKS5) {
+			try { parsedSocks5Address = await 获取SOCKS5账号(env.SOCKS5, 1080); 我的SOCKS5账号 = env.SOCKS5; 启用SOCKS5反代 = 'socks5'; } catch (e) { log(`[SOCKS5] env.SOCKS5 解析失败: ${e.message}`); }
+		} else if (env.HTTP_PROXY) {
+			try { parsedSocks5Address = await 获取SOCKS5账号(env.HTTP_PROXY, 80); 我的SOCKS5账号 = env.HTTP_PROXY; 启用SOCKS5反代 = 'http'; } catch (e) { log(`[HTTP_PROXY] 解析失败: ${e.message}`); }
+		}
+		启用SOCKS5全局反代 = env.GLOBALPROXY === '1';
 		if (访问路径 === 'version' && url.searchParams.get('uuid') === userID) {// 版本信息接口
 			return new Response(JSON.stringify({ Version: Number(String(Version).replace(/\D+/g, '')) }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 		} else if (管理员密码 && upgradeHeader === 'websocket') {// WebSocket代理
@@ -58,7 +69,7 @@ export default {
 				} else if (访问路径 === 'login') {//处理登录页面和登录请求
 					const cookies = request.headers.get('Cookie') || '';
 					const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
-					if (authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/admin' } });
+					if (await verifyAuthToken(authCookie, 管理员密码, 加密秘钥)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/admin' } });
 					if (request.method === 'POST') {
 						const formData = await request.text();
 						const params = new URLSearchParams(formData);
@@ -66,7 +77,7 @@ export default {
 						if (输入密码 === 管理员密码) {
 							// 密码正确，设置cookie并返回成功标记
 							const 响应 = new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-							响应.headers.set('Set-Cookie', `auth=${await MD5MD5(UA + 加密秘钥 + 管理员密码)}; Path=/; Max-Age=86400; HttpOnly`);
+							响应.headers.set('Set-Cookie', `auth=${await signAuthToken(管理员密码, 加密秘钥)}; Path=/; Max-Age=86400; Secure; HttpOnly; SameSite=Strict`);
 							return 响应;
 						}
 					}
@@ -75,13 +86,15 @@ export default {
 					const cookies = request.headers.get('Cookie') || '';
 					const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
 					// 没有cookie或cookie错误，跳转到/login页面
-					if (!authCookie || authCookie !== await MD5MD5(UA + 加密秘钥 + 管理员密码)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
+					if (!await verifyAuthToken(authCookie, 管理员密码, 加密秘钥)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
 					if (访问路径 === 'admin/log.json') {// 读取日志内容
 						const 读取日志内容 = await env.KV.get('log.json') || '[]';
 						return new Response(读取日志内容, { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-					} else if (区分大小写访问路径 === 'admin/getCloudflareUsage') {// 查询请求量
+					} else if (区分大小写访问路径 === 'admin/getCloudflareUsage') {// 查询请求量（POST only，避免密钥出现在URL中）
+						if (request.method !== 'POST') return new Response(JSON.stringify({ error: '请使用POST请求' }), { status: 405, headers: { 'Content-Type': 'application/json;charset=utf-8', 'Allow': 'POST' } });
 						try {
-							const Usage_JSON = await getCloudflareUsage(url.searchParams.get('Email'), url.searchParams.get('GlobalAPIKey'), url.searchParams.get('AccountID'), url.searchParams.get('APIToken'));
+							const body = await request.json();
+							const Usage_JSON = await getCloudflareUsage(body.Email, body.GlobalAPIKey, body.AccountID, body.APIToken);
 							return new Response(JSON.stringify(Usage_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
 						} catch (err) {
 							const errorResponse = { msg: '查询请求量失败，失败原因：' + err.message, error: err.message };
@@ -102,16 +115,22 @@ export default {
 							}
 						}
 						return new Response(JSON.stringify({ success: false, data: [] }, null, 2), { status: 403, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-					} else if (访问路径 === 'admin/check') {// SOCKS5代理检查
+					} else if (访问路径 === 'admin/check') {// SOCKS5代理检查（POST only，避免代理凭据出现在URL中）
+						if (request.method !== 'POST') return new Response(JSON.stringify({ error: '请使用POST请求' }), { status: 405, headers: { 'Content-Type': 'application/json;charset=utf-8', 'Allow': 'POST' } });
 						let 检测代理响应;
-						if (url.searchParams.has('socks5')) {
-							检测代理响应 = await SOCKS5可用性验证('socks5', url.searchParams.get('socks5'));
-						} else if (url.searchParams.has('http')) {
-							检测代理响应 = await SOCKS5可用性验证('http', url.searchParams.get('http'));
-						} else if (url.searchParams.has('https')) {
-							检测代理响应 = await SOCKS5可用性验证('https', url.searchParams.get('https'));
-						} else {
-							return new Response(JSON.stringify({ error: '缺少代理参数' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+						try {
+							const body = await request.json();
+							if (body.socks5) {
+								检测代理响应 = await SOCKS5可用性验证('socks5', body.socks5);
+							} else if (body.http) {
+								检测代理响应 = await SOCKS5可用性验证('http', body.http);
+							} else if (body.https) {
+								检测代理响应 = await SOCKS5可用性验证('https', body.https);
+							} else {
+								return new Response(JSON.stringify({ error: '缺少代理参数' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+							}
+						} catch (e) {
+							return new Response(JSON.stringify({ error: '请求体解析失败: ' + e.message }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 						}
 						return new Response(JSON.stringify(检测代理响应, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 					}
@@ -210,7 +229,7 @@ export default {
 					return fetch(Pages静态页面 + '/admin' + url.search);
 				} else if (访问路径 === 'logout' || uuidRegex.test(访问路径)) {//清除cookie并跳转到登录页面
 					const 响应 = new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
-					响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
+					响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Strict');
 					return 响应;
 				} else if (访问路径 === 'sub') {//处理订阅请求
 					const 订阅TOKEN = await MD5MD5(host + userID), 作为优选订阅生成器 = ['1', 'true'].includes(env.BEST_SUB) && url.searchParams.get('host') === 'example.com' && url.searchParams.get('uuid') === '00000000-0000-4000-8000-000000000000' && UA.toLowerCase().includes('tunnel (https://github.com/cmliu/edge');
@@ -370,7 +389,7 @@ export default {
 				} else if (访问路径 === 'locations') {//反代locations列表
 					const cookies = request.headers.get('Cookie') || '';
 					const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
-					if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
+					if (authCookie && await verifyAuthToken(authCookie, 管理员密码, 加密秘钥)) return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
 				} else if (访问路径 === 'robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
 			} else if (!envUUID) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }) });
 		}
@@ -1507,6 +1526,11 @@ async function SSAEAD解密(cryptoKey, nonceCounter, ciphertext) {
 
 async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID) {
 	log(`[TCP转发] 目标: ${host}:${portNum} | 反代IP: ${反代IP} | 反代兜底: ${启用反代兜底 ? '是' : '否'} | 反代类型: ${启用SOCKS5反代 || 'proxyip'} | 全局: ${启用SOCKS5全局反代 ? '是' : '否'}`);
+	// Safe mode: block outbound connections to private/loopback/link-local IP spaces (SSRF protection)
+	if (safeMode && !allowPrivate && !isSafeIP(host)) {
+		closeSocketQuietly(ws);
+		throw new Error(`[安全模式] 目标地址 ${host} 属于受限IP空间，连接已阻止`);
+	}
 	const 连接超时毫秒 = 1000;
 	let 已通过代理发送首包 = false;
 
@@ -2393,6 +2417,62 @@ async function MD5MD5(文本) {
 	return 第二次十六进制.toLowerCase();
 }
 
+// Generate a HMAC-SHA256 signed authentication token.
+// Format: base64(signature) + "." + base64(expiry_ms)
+// The signature covers adminPassword + ":" + expiry so that changing either
+// ADMIN or KEY immediately invalidates all existing sessions.
+async function signAuthToken(adminPassword, signingKey) {
+	const expiry = String(Date.now() + 86400 * 1000); // 24 h
+	const encoder = new TextEncoder();
+	const key = await crypto.subtle.importKey(
+		'raw', encoder.encode(signingKey), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+	);
+	const sigBytes = await crypto.subtle.sign('HMAC', key, encoder.encode(adminPassword + ':' + expiry));
+	return btoa(String.fromCharCode(...new Uint8Array(sigBytes))) + '.' + btoa(expiry);
+}
+
+// Verify a token issued by signAuthToken. Returns true only when the
+// signature is valid AND the token has not yet expired.
+async function verifyAuthToken(token, adminPassword, signingKey) {
+	if (!token) return false;
+	try {
+		const dotIdx = token.indexOf('.');
+		if (dotIdx <= 0) return false;
+		const sig64 = token.slice(0, dotIdx);
+		const exp64 = token.slice(dotIdx + 1);
+		const expiry = atob(exp64);
+		if (Number(expiry) < Date.now()) return false;
+		const encoder = new TextEncoder();
+		const key = await crypto.subtle.importKey(
+			'raw', encoder.encode(signingKey), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
+		);
+		const sigBytes = Uint8Array.from(atob(sig64), c => c.charCodeAt(0));
+		return await crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(adminPassword + ':' + expiry));
+	} catch { return false; }
+}
+
+// Safe-mode egress filter: returns true when the target IP is NOT in a
+// private / loopback / link-local range, false when it should be blocked.
+// Only called when the target is a bare IP address; domain names pass through.
+function isSafeIP(ip) {
+	const clean = (ip.startsWith('[') && ip.endsWith(']')) ? ip.slice(1, -1) : ip;
+	if (clean.includes(':')) {
+		// IPv6: block ::1 (loopback), fc00::/7 (unique-local), fe80::/10 (link-local)
+		return !/^(::1$|fc[0-9a-f][0-9a-f]:|fe[89ab][0-9a-f]:)/i.test(clean);
+	}
+	const parts = clean.split('.').map(Number);
+	if (parts.length !== 4 || parts.some(p => !Number.isInteger(p) || p < 0 || p > 255)) return true; // not a valid IPv4 literal → allow
+	const [a, b] = parts;
+	return !(
+		a === 0 ||                              // 0.0.0.0/8
+		a === 10 ||                             // 10.0.0.0/8
+		a === 127 ||                            // 127.0.0.0/8 (loopback)
+		(a === 169 && b === 254) ||             // 169.254.0.0/16 (link-local)
+		(a === 172 && b >= 16 && b <= 31) ||    // 172.16.0.0/12 (private)
+		(a === 192 && b === 168)                // 192.168.0.0/16 (private)
+	);
+}
+
 function 随机路径(完整节点路径 = "/") {
 	const 常用路径目录 = ["about", "account", "acg", "act", "activity", "ad", "ads", "ajax", "album", "albums", "anime", "api", "app", "apps", "archive", "archives", "article", "articles", "ask", "auth", "avatar", "bbs", "bd", "blog", "blogs", "book", "books", "bt", "buy", "cart", "category", "categories", "cb", "channel", "channels", "chat", "china", "city", "class", "classify", "clip", "clips", "club", "cn", "code", "collect", "collection", "comic", "comics", "community", "company", "config", "contact", "content", "course", "courses", "cp", "data", "detail", "details", "dh", "directory", "discount", "discuss", "dl", "dload", "doc", "docs", "document", "documents", "doujin", "download", "downloads", "drama", "edu", "en", "ep", "episode", "episodes", "event", "events", "f", "faq", "favorite", "favourites", "favs", "feedback", "file", "files", "film", "films", "forum", "forums", "friend", "friends", "game", "games", "gif", "go", "go.html", "go.php", "group", "groups", "help", "home", "hot", "htm", "html", "image", "images", "img", "index", "info", "intro", "item", "items", "ja", "jp", "jump", "jump.html", "jump.php", "jumping", "knowledge", "lang", "lesson", "lessons", "lib", "library", "link", "links", "list", "live", "lives", "m", "mag", "magnet", "mall", "manhua", "map", "member", "members", "message", "messages", "mobile", "movie", "movies", "music", "my", "new", "news", "note", "novel", "novels", "online", "order", "out", "out.html", "out.php", "outbound", "p", "page", "pages", "pay", "payment", "pdf", "photo", "photos", "pic", "pics", "picture", "pictures", "play", "player", "playlist", "post", "posts", "product", "products", "program", "programs", "project", "qa", "question", "rank", "ranking", "read", "readme", "redirect", "redirect.html", "redirect.php", "reg", "register", "res", "resource", "retrieve", "sale", "search", "season", "seasons", "section", "seller", "series", "service", "services", "setting", "settings", "share", "shop", "show", "shows", "site", "soft", "sort", "source", "special", "star", "stars", "static", "stock", "store", "stream", "streaming", "streams", "student", "study", "tag", "tags", "task", "teacher", "team", "tech", "temp", "test", "thread", "tool", "tools", "topic", "topics", "torrent", "trade", "travel", "tv", "txt", "type", "u", "upload", "uploads", "url", "urls", "user", "users", "v", "version", "video", "videos", "view", "vip", "vod", "watch", "web", "wenku", "wiki", "work", "www", "zh", "zh-cn", "zh-tw", "zip"];
 	const 随机数 = Math.floor(Math.random() * 3 + 1);
@@ -3091,77 +3171,9 @@ async function 请求优选API(urls, 默认端口 = '443', 超时时间 = 3000) 
 }
 
 async function 反代参数获取(url) {
-	const { searchParams } = url;
-	const pathname = decodeURIComponent(url.pathname);
-	const pathLower = pathname.toLowerCase();
-
-	我的SOCKS5账号 = searchParams.get('socks5') || searchParams.get('http') || searchParams.get('https') || null;
-	启用SOCKS5全局反代 = searchParams.has('globalproxy');
-	if (searchParams.get('socks5')) 启用SOCKS5反代 = 'socks5';
-	else if (searchParams.get('http')) 启用SOCKS5反代 = 'http';
-	else if (searchParams.get('https')) 启用SOCKS5反代 = 'https';
-
-	const 解析代理URL = (值, 强制全局 = true) => {
-		const 匹配 = /^(socks5|http|https):\/\/(.+)$/i.exec(值 || '');
-		if (!匹配) return false;
-		启用SOCKS5反代 = 匹配[1].toLowerCase();
-		我的SOCKS5账号 = 匹配[2].split('/')[0];
-		if (强制全局) 启用SOCKS5全局反代 = true;
-		return true;
-	};
-
-	const 设置反代IP = (值) => {
-		反代IP = 值;
-		启用反代兜底 = false;
-	};
-
-	const 提取路径值 = (值) => {
-		if (!值.includes('://')) {
-			const 斜杠索引 = 值.indexOf('/');
-			return 斜杠索引 > 0 ? 值.slice(0, 斜杠索引) : 值;
-		}
-		const 协议拆分 = 值.split('://');
-		if (协议拆分.length !== 2) return 值;
-		const 斜杠索引 = 协议拆分[1].indexOf('/');
-		return 斜杠索引 > 0 ? `${协议拆分[0]}://${协议拆分[1].slice(0, 斜杠索引)}` : 值;
-	};
-
-	const 查询反代IP = searchParams.get('proxyip');
-	if (查询反代IP !== null) {
-		if (!解析代理URL(查询反代IP)) return 设置反代IP(查询反代IP);
-	} else {
-		let 匹配 = /\/(socks5?|http|https):\/?\/?([^/?#\s]+)/i.exec(pathname);
-		if (匹配) {
-			const 类型 = 匹配[1].toLowerCase();
-			启用SOCKS5反代 = 类型 === 'http' ? 'http' : (类型 === 'https' ? 'https' : 'socks5');
-			我的SOCKS5账号 = 匹配[2].split('/')[0];
-			启用SOCKS5全局反代 = true;
-		} else if ((匹配 = /\/(g?s5|socks5|g?http|g?https)=([^/?#\s]+)/i.exec(pathname))) {
-			const 类型 = 匹配[1].toLowerCase();
-			我的SOCKS5账号 = 匹配[2].split('/')[0];
-			启用SOCKS5反代 = 类型.includes('https') ? 'https' : (类型.includes('http') ? 'http' : 'socks5');
-			if (类型.startsWith('g')) 启用SOCKS5全局反代 = true;
-		} else if ((匹配 = /\/(proxyip[.=]|pyip=|ip=)([^?#\s]+)/.exec(pathLower))) {
-			const 路径反代值 = 提取路径值(匹配[2]);
-			if (!解析代理URL(路径反代值)) return 设置反代IP(路径反代值);
-		}
-	}
-
-	if (!我的SOCKS5账号) {
-		启用SOCKS5反代 = null;
-		return;
-	}
-
-	try {
-		parsedSocks5Address = await 获取SOCKS5账号(我的SOCKS5账号, 启用SOCKS5反代 === 'https' ? 443 : 80);
-		if (searchParams.get('socks5')) 启用SOCKS5反代 = 'socks5';
-		else if (searchParams.get('http')) 启用SOCKS5反代 = 'http';
-		else if (searchParams.get('https')) 启用SOCKS5反代 = 'https';
-		else 启用SOCKS5反代 = 启用SOCKS5反代 || 'socks5';
-	} catch (err) {
-		console.error('解析SOCKS5地址失败:', err.message);
-		启用SOCKS5反代 = null;
-	}
+	// URL parameter proxy overrides are disabled for security (personal-use hardening).
+	// Proxy configuration is read exclusively from environment variables set in the
+	// main request handler (env.PROXYIP → 反代IP, env.SOCKS5/HTTP_PROXY → SOCKS5 vars).
 }
 
 const SOCKS5账号Base64正则 = /^(?:[A-Z0-9+/]{4})*(?:[A-Z0-9+/]{2}==|[A-Z0-9+/]{3}=)?$/i, IPv6方括号正则 = /^\[.*\]$/;
